@@ -368,8 +368,17 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
                 lk_inst.refresh_token = stored_tokens.get("refresh")
                 lk_inst.userid = stored_tokens.get("userid")
             else:
-                if not await lk_inst.login():
-                    raise HomeAssistantError("LK Systems authentication failed")
+                # Try refresh token first, fall back to full login
+                stored_refresh = stored_tokens.get("refresh")
+                authenticated = False
+                if stored_refresh:
+                    authenticated = await lk_inst.refresh_access_token(stored_refresh)
+                    if authenticated:
+                        _LOGGER.debug("Token refreshed successfully")
+                if not authenticated:
+                    _LOGGER.debug("Refresh failed or no refresh token, performing full login")
+                    if not await lk_inst.login():
+                        raise HomeAssistantError("LK Systems authentication failed")
                 TOKEN_STORAGE[self._entry_id] = {
                     "jwt": lk_inst.jwt_token,
                     "refresh": lk_inst.refresh_token,

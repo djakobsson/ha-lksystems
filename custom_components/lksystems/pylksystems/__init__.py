@@ -812,83 +812,46 @@ class LKSystemsManager:
         except (ClientResponseError, ClientError) as error:
             return await self.handle_client_error(endpoint, headers, error)
 
-    async def set_thermostat_temperature(self, device_id, temperature):
-        """Set thermostat temperature through the API.
+    async def refresh_access_token(self, refresh_token: str) -> bool:
+        """Attempt to obtain a new access token using the stored refresh token."""
+        endpoint = "auth/auth/refresh"
+        headers = {**self._get_headers()}
+        try:
+            async with self.session.post(
+                self.base_url + endpoint,
+                json={"refreshToken": refresh_token},
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    self.jwt_token = data.get("accessToken")
+                    self.refresh_token = data.get("refreshToken")
+                    return bool(self.jwt_token)
+                _LOGGER.debug("Token refresh returned status %d", response.status)
+                return False
+        except (ClientResponseError, ClientError) as error:
+            _LOGGER.debug("Token refresh failed: %s", error)
+            return False
+
+    async def set_thermostat_temperature(self, device_id: str, temperature: int) -> dict:
+        """Set thermostat temperature via the standard LK API.
 
         Args:
-            device_id: The device identity (MAC or unique ID)
-            temperature: The temperature value in tenths of a degree (e.g. 215 = 21.5°C)
-
-        Returns:
-            Result dictionary containing success status and any response data
+            device_id: The device MAC address
+            temperature: Temperature in tenths of a degree (e.g. 215 = 21.5°C)
         """
         result = {"success": False, "data": None, "error": None}
-
         try:
-            # Use the correct Azure endpoint URL for thermostat temperature setting
-            url = "https://lk-arc-structure-mapper.azurewebsites.net/api/measurement/sense"
-
-            # Get base headers from _get_headers() method
-            headers = {
-                **self._get_headers(),
-                "authorization": f"Bearer {self.jwt_token}",
-            }
-
-            _LOGGER.debug(
-                "Using Azure endpoint for thermostat control with token: %s...",
-                self.jwt_token[:20] if self.jwt_token else "None",
-            )
-
-            # Create simple payload according to the required format
-            payload = {"temperature": temperature, "mac": device_id}
-
-            _LOGGER.debug(
-                "Setting thermostat %s to temperature %s with payload: %s",
-                device_id,
-                temperature,
-                payload,
-            )
-
-            # Make the API request
-            async with self.session.post(url, headers=headers, json=payload) as resp:
-                if resp.status != 200 and resp.status != 201 and resp.status != 202:
-                    error_text = await resp.text()
-                    result["error"] = f"API error {resp.status}: {error_text}"
-                    return result
-
-                # Parse the response
-                try:
-                    response_data = await resp.json()
-                    result["data"] = response_data
-
-                    # Update our cached measurement data with the complete response
-                    # The response contains full device state including all measurements
-                    if device_id in self._device_measurements:
-                        # Log the complete response for debugging
-                        _LOGGER.debug(
-                            "Received updated device state: %s", response_data
-                        )
-
-                        # Update all fields from the response
-                        if isinstance(response_data, dict):
-                            # Store the complete state including currentTemperature, currentHumidity, etc.
-                            self._device_measurements[device_id].update(response_data)
-                            _LOGGER.debug(
-                                "Updated cached device state for %s", device_id
-                            )
-                except Exception as json_err:
-                    # Handle case where response might not be JSON
-                    result["data"] = await resp.text()
-                    _LOGGER.warning(
-                        "Failed to parse thermostat response as JSON: %s", json_err
-                    )
-
+            endpoint = f"control/arc/sense/{device_id}/temperature"
+            success, data = await self._post(endpoint, {"temperature": temperature})
+            if success:
                 result["success"] = True
-                return result
-
+                result["data"] = data
+            else:
+                result["error"] = "API request failed"
         except Exception as ex:
             result["error"] = f"Exception: {str(ex)}"
-            return result
+        return result
 
     @property
     def arc_sense_measurements(self):

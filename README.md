@@ -1,39 +1,91 @@
-# Custom Home Assistant integration for LK Systems
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs) 
+# LK Systems for Home Assistant
 
-## Summary
-This integration uses cloud polling from the API provided by LK Systems.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
 
-The integration supports:
-- Water Meter [Cubic Secure](https://www.lksystems.se/sv/produkter/teknisk-armatur/vattenfelsutrustning/vattenfelsbrytare/lk-cubicsecure-77792594)
-- LK Arc thermostats [Arc Thermostats](https://www.lksystems.se/sv/produktsystem/golvvarme/lk-rumsreglering-arc/)
+Cloud-polling integration for LK Systems smart home devices using the MyLK API.
+
+Supports:
+- [LK CubicSecure](https://www.lksystems.se/sv/produkter/teknisk-armatur/vattenfelsutrustning/vattenfelsbrytare/lk-cubicsecure-77792594) — water protection unit
+- [LK CubicDetector](https://www.lksystems.se/sv/produkter/teknisk-armatur/vattenfelsutrustning/) — wireless water/freeze sensor
+- [LK Arc](https://www.lksystems.se/sv/produktsystem/golvvarme/lk-rumsreglering-arc/) — wireless thermostats and sensors
 
 ## Features
 
-### LK Arc Thermostats
-- Temperature control with 0.5°C precision (range: 5°C - 30°C)
-- Real-time temperature monitoring
-- Automatic heat control (HVAC mode: Heat)
-- Displays current room temperature and target temperature
-- Heat status indication (Heating/Idle based on current vs target temperature)
-- Organized by zones for easy management
-- Integrated with Home Assistant's climate controls
+### LK CubicSecure
 
-**Note**: The integration is in active development, as of now the support is in a very early stage use at own risk, breaking changes will most probably follow.. While core functionality is stable, additional features may be added in future updates.
+#### Sensors
 
+| Entity | Description |
+|--------|-------------|
+| Water Pressure | Current pressure (bar) |
+| Ambient Temperature | Temperature around the unit (°C) |
+| Average Water Temperature | Average water temperature (°C) |
+| Min / Max Water Temperature | Min and max water temperature (°C) |
+| Total Volume Day | Water consumed today (L) |
+| Total Volume | Cumulative water volume (L) |
+| Leak Mean Flow | Flow rate during active leak event (L/h) |
+| Leak Started At / Updated At | Timestamps for the current leak event |
+| Leak Acknowledged | Whether the active leak has been acknowledged |
+| Signal Strength | RSSI (dBm) — diagnostic |
+| Last Status / Cache Updated | Device timestamps — diagnostic |
+| Firmware / Hardware Version | Versions — diagnostic |
 
-# Installation
-### HACS installation
+#### Binary sensor
+
+| Entity | Triggers on |
+|--------|-------------|
+| Water Leak | Any active leak state (`noLeak` = off) |
+
+#### Valve
+
+| Entity | Description |
+|--------|-------------|
+| Valve | Open or close the main water shutoff |
+
+#### Services
+
+| Service | Description |
+|---------|-------------|
+| `lksystems.pause_leak_detection` | Pause leak alerts for N seconds |
+| `lksystems.set_pressure_test_schedule` | Schedule the daily pressure test |
+| `lksystems.set_thresholds` | Configure medium/large leak and pressure thresholds |
+
+### LK CubicDetector
+
+Battery-powered wireless sensor. Multiple detectors per household are supported.
+
+| Entity | Description |
+|--------|-------------|
+| Temperature | Ambient temperature (°C) |
+| Humidity | Relative humidity (%) |
+| Battery | Battery level (%) |
+| Signal Strength | RSSI (dBm) — diagnostic |
+| Last Status | Last device timestamp — diagnostic |
+| Water Leak | `on` when water or freeze is detected |
+
+### LK Arc
+
+| Entity | Description |
+|--------|-------------|
+| Thermostat | Temperature control, 0.5 °C steps, 5–30 °C range (arc-tune devices) |
+| Temperature | Current room temperature (°C) |
+| Humidity | Relative humidity (%) |
+| Battery | Battery level (%) |
+| Signal Strength | RSSI (dBm) |
+
+> **Note:** Early development — use at own risk, breaking changes may occur.
+
+## Installation
+
+### HACS (recommended)
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=angoyd&repository=ha-lksystems&category=integration)
 
+### Manual
 
-### Git installation
-1. Make sure you have git installed on your machine.
-2. Navigate to you home assistant configuration folder.
-3. Create a `custom_components` folder of it does not exist, navigate down into it after creation.
-4. Execute the following command: `git clone https://github.com/angoyd/ha-lksystems.git lksystems`
-5. Restart Home-Assistant.
+1. Copy the `custom_components/lksystems` folder into your HA `custom_components` directory.
+2. Restart Home Assistant.
 
-## Enable the integration
-Go to Settings / Devices & Services / Integrations. Click **+ ADD INTEGRATION**
-Follow the instructions
+## Setup
+
+Go to **Settings → Devices & Services → Integrations**, click **+ ADD INTEGRATION**, and search for **LK Systems**. Enter your MyLK account credentials.

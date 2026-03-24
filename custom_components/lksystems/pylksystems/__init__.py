@@ -11,8 +11,6 @@ from typing import TypedDict
 
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
-from dateutil.relativedelta import relativedelta
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -78,6 +76,7 @@ class LKSystemsManager:
         self._hub_devices = None
         self._device_measurements = {}
         self._device_configurations = {}
+        self._cubic_detector_measurements = {}
 
     async def __aenter__(self):
         """Asynchronous enter."""
@@ -1023,3 +1022,20 @@ class LKSystemsManager:
         if success:
             return True
         return False
+
+    async def get_cubic_detector_measurement(
+        self, detector_identity: str, force_update: bool = False
+    ):
+        """Fetch CubicDetector measurement."""
+        force = "1" if force_update else "0"
+        endpoint = f"service/cubic/detector/{detector_identity}/measurement/{force}"
+        success, data = await self._get(endpoint)
+        if success:
+            self._cubic_detector_measurements[detector_identity] = data
+            return True
+        return False
+
+    @property
+    def cubic_detector_measurements(self) -> dict:
+        """Property for CubicDetector measurement data."""
+        return self._cubic_detector_measurements

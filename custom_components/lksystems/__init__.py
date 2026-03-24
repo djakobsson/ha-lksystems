@@ -43,7 +43,7 @@ from .services import async_setup_services
 _LOGGER = logging.getLogger(__name__)
 
 # Define the platforms we support
-PLATFORMS = [Platform.SENSOR, Platform.CLIMATE]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.CLIMATE, Platform.SENSOR, Platform.VALVE]
 
 
 class LkStructureResp(TypedDict):
@@ -194,7 +194,7 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
             entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         )
 
-        _LOGGER.warning(
+        _LOGGER.info(
             "Initializing LK Systems coordinator with update interval: %d minutes",
             update_interval_minutes,
         )
@@ -219,8 +219,8 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
 
     def _setup_update_interval(self):
         """Set up the update interval."""
-        _LOGGER.warning(
-            f"Setting up update interval for {DOMAIN} to {self._update_interval_minutes} minutes"
+        _LOGGER.debug(
+            "Setting up update interval for %s to %d minutes", DOMAIN, self._update_interval_minutes
         )
 
         # Cancel any existing scheduled updates
@@ -229,11 +229,8 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
         # Ensure the update interval is correctly set
         self.update_interval = timedelta(minutes=self._update_interval_minutes)
 
-        # Log next update time
         next_update = dt_util.utcnow() + self.update_interval
-        _LOGGER.warning(
-            f"Next automatic update scheduled for: {next_update.isoformat()}"
-        )
+        _LOGGER.debug("Next automatic update scheduled for: %s", next_update.isoformat())
 
     async def set_thermostat_temperature(self, device_id, temperature):
         """Set thermostat temperature through the API.
@@ -275,7 +272,7 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
 
     async def force_device_update(self, device_id: str) -> bool:
         """Force update for a specific device from API."""
-        _LOGGER.warning("FORCE UPDATE REQUESTED for device %s", device_id)
+        _LOGGER.debug("Force update requested for device %s", device_id)
 
         try:
             # Get credentials
@@ -311,8 +308,7 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
                 if success and device_id in lk_inst.device_measurements:
                     measurement_data = lk_inst.device_measurements[device_id]
 
-                    # Log the raw measurement data
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Got fresh data for %s: Temperature=%s, Humidity=%s, Battery=%s",
                         device_id,
                         measurement_data.get("currentTemperature"),
@@ -368,6 +364,64 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
         except Exception as ex:
             _LOGGER.error("Error during forced device update: %s", ex)
             return False
+
+    async def _run_with_api(self, coro_fn):
+        """Execute an API coroutine using a stored (or freshly obtained) token."""
+        username = self._entry.data.get(CONF_USERNAME)
+        password = self._entry.data.get(CONF_PASSWORD)
+        async with LKSystemsManager(username, password) as lk_inst:
+            stored_tokens = TOKEN_STORAGE.get(self._entry_id, {})
+            stored_jwt = stored_tokens.get("jwt")
+            if stored_jwt and is_token_valid(stored_jwt):
+                lk_inst.jwt_token = stored_jwt
+                lk_inst.refresh_token = stored_tokens.get("refresh")
+                lk_inst.userid = stored_tokens.get("userid")
+            else:
+                if not await lk_inst.login():
+                    raise HomeAssistantError("LK Systems authentication failed")
+                TOKEN_STORAGE[self._entry_id] = {
+                    "jwt": lk_inst.jwt_token,
+                    "refresh": lk_inst.refresh_token,
+                    "expiry": dt_util.utcnow().timestamp() + 3600,
+                    "userid": lk_inst.userid,
+                }
+            return await coro_fn(lk_inst)
+
+    async def cubic_secure_close_valve(self, serial_number: str) -> bool:
+        """Close the CubicSecure water valve."""
+        return await self._run_with_api(
+            lambda lk: lk.cubic_secure_close_valve(serial_number)
+        )
+
+    async def cubic_secure_open_valve(self, serial_number: str) -> bool:
+        """Open the CubicSecure water valve."""
+        return await self._run_with_api(
+            lambda lk: lk.cubic_secure_open_valve(serial_number)
+        )
+
+    async def cubic_secure_pause_leak_detection(
+        self, serial_number: str, seconds: int
+    ) -> bool:
+        """Pause CubicSecure leak detection for a given number of seconds."""
+        return await self._run_with_api(
+            lambda lk: lk.cubic_secure_pause_leak_detection(serial_number, seconds)
+        )
+
+    async def cubic_secure_set_pressure_test_schedule(
+        self, serial_number: str, hour: int, minute: int
+    ) -> bool:
+        """Set the CubicSecure pressure-test schedule."""
+        return await self._run_with_api(
+            lambda lk: lk.cubic_secure_set_pressure_test_schedule(serial_number, hour, minute)
+        )
+
+    async def cubic_secure_set_thresholds(
+        self, serial_number: str, thresholds: LKThresholds
+    ) -> bool:
+        """Update CubicSecure leak-detection thresholds."""
+        return await self._run_with_api(
+            lambda lk: lk.cubic_secure_set_thresholds(serial_number, thresholds)
+        )
 
     async def _async_update_data(self) -> LkStructureResp:  # noqa: C901
         """Fetch the latest data from the source."""
@@ -442,7 +496,8 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
                         ),
                         None,
                     ),
-                    "cubic_last_messurement": None,
+                    "cubic_last_measurement": None,
+                    "cubic_detectors": [],
                     "devices": [],
                     "device_details": {},  # Will store detailed information about each device
                     "update_time": self._last_update_time.isoformat(),
@@ -576,7 +631,7 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
                                 if await lk_inst.get_cubic_secure_measurement(
                                     device_identity
                                 ):
-                                    resp["cubic_last_messurement"] = (
+                                    resp["cubic_last_measurement"] = (
                                         lk_inst.cubic_secure_messurement
                                     )
 
@@ -644,6 +699,29 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
                             except Exception as err:
                                 _LOGGER.warning(
                                     "Error fetching cubic measurements: %s", str(err)
+                                )
+
+                        # CubicDetector — battery-powered water/freeze sensor
+                        elif machine.get("deviceType") == "cubicdetector":
+                            try:
+                                measurement = None
+                                if await lk_inst.get_cubic_detector_measurement(
+                                    device_identity, force_update=True
+                                ):
+                                    measurement = lk_inst.cubic_detector_measurements.get(
+                                        device_identity
+                                    )
+                                resp["cubic_detectors"].append(
+                                    {"machine_info": machine, "measurement": measurement}
+                                )
+                            except Exception as err:
+                                _LOGGER.warning(
+                                    "Error fetching CubicDetector measurement for %s: %s",
+                                    device_identity,
+                                    err,
+                                )
+                                resp["cubic_detectors"].append(
+                                    {"machine_info": machine, "measurement": None}
                                 )
 
                 # Now directly fetch fresh measurement data for each Arc sense device
@@ -840,7 +918,7 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     # If update interval changed, log it
     if old_update_interval != new_update_interval:
-        _LOGGER.warning(
+        _LOGGER.info(
             "Update interval changed from %s to %s minutes",
             old_update_interval,
             new_update_interval,

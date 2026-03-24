@@ -1,178 +1,112 @@
-from .pylksystems import LKSystemsManager, LKThresholds, LKPressureThresholds
+"""LK Systems service actions."""
+
+from __future__ import annotations
+
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import (
-    device_registry as dr,
-)
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import device_registry as dr
 
-from .const import (
-    DOMAIN,
-)
+from .const import DOMAIN
+from .pylksystems import LKPressureThresholds, LKThresholds
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    @callback
+    """Register LK Systems service actions."""
+
+    def _get_serial(call: ServiceCall) -> str | None:
+        """Extract the device serial number from a service call's device_id."""
+        device_id = call.data.get("device_id")
+        device_entry = dr.async_get(hass).async_get(device_id)
+        if device_entry is None:
+            _LOGGER.error("Device not found: %s", device_id)
+            return None
+        sn = device_entry.serial_number
+        if not sn:
+            _LOGGER.error("No serial number for device %s", device_id)
+        return sn
+
     async def pause_leak_detection(call: ServiceCall) -> None:
-        """Handle the service action call."""
-        device_id = call.data.get("device_id")
+        """Pause leak detection for the given number of seconds."""
+        sn = _get_serial(call)
+        if not sn:
+            return
         seconds = int(call.data.get("seconds", 3600))
-        device_reg = dr.async_get(hass)
-        device_entry = device_reg.async_get(device_id)
-        sn = device_entry.serial_number
-        _LOGGER.info(f"Closing valve {sn}")
-        if not sn:
-            _LOGGER.error("No serial number found for device %s", device_id)
-            return
+        coordinator = hass.data[DOMAIN][entry.entry_id]
         try:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
+            await coordinator.cubic_secure_pause_leak_detection(sn, seconds)
+        except Exception as err:
+            _LOGGER.error("Error pausing leak detection: %s", err)
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                if not await lk_inst.login():
-                    _LOGGER.error("Failed to login, abort update")
-                    raise Exception("Failed to login")
-                await lk_inst.cubic_secure_pause_leak_detection(sn, seconds)
-        except Exception as e:
-            _LOGGER.error("Error closing valve: %s", e)
-
-    @callback
     async def close_valve(call: ServiceCall) -> None:
-        """Handle the service action call."""
-        device_id = call.data.get("device_id")
-        device_reg = dr.async_get(hass)
-        device_entry = device_reg.async_get(device_id)
-        sn = device_entry.serial_number
-        _LOGGER.info(f"Closing valve {sn}")
+        """Close the main water valve."""
+        sn = _get_serial(call)
         if not sn:
-            _LOGGER.error("No serial number found for device %s", device_id)
             return
+        coordinator = hass.data[DOMAIN][entry.entry_id]
         try:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
+            await coordinator.cubic_secure_close_valve(sn)
+        except Exception as err:
+            _LOGGER.error("Error closing valve: %s", err)
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                if not await lk_inst.login():
-                    _LOGGER.error("Failed to login, abort update")
-                    raise Exception("Failed to login")
-                await lk_inst.cubic_secure_close_valve(sn)
-        except Exception as e:
-            _LOGGER.error("Error closing valve: %s", e)
-
-    @callback
     async def open_valve(call: ServiceCall) -> None:
-        """Handle the service action call."""
-        device_id = call.data.get("device_id")
-        device_reg = dr.async_get(hass)
-        device_entry = device_reg.async_get(device_id)
-        sn = device_entry.serial_number
-        _LOGGER.info(f"Open valve {sn}")
+        """Open the main water valve."""
+        sn = _get_serial(call)
         if not sn:
-            _LOGGER.error("No serial number found for device %s", device_id)
             return
+        coordinator = hass.data[DOMAIN][entry.entry_id]
         try:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
+            await coordinator.cubic_secure_open_valve(sn)
+        except Exception as err:
+            _LOGGER.error("Error opening valve: %s", err)
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                if not await lk_inst.login():
-                    _LOGGER.error("Failed to login, abort update")
-                    raise Exception("Failed to login")
-                await lk_inst.cubic_secure_open_valve(sn)
-        except Exception as e:
-            _LOGGER.error("Error open valve: %s", e)
-
-    @callback
     async def set_pressure_test_schedule(call: ServiceCall) -> None:
-        """Handle the service action call."""
-        device_id = call.data.get("device_id")
+        """Set the pressure test schedule."""
+        sn = _get_serial(call)
+        if not sn:
+            return
         hour = call.data.get("hour", 2)
         minute = call.data.get("minute", 0)
-        device_reg = dr.async_get(hass)
-        device_entry = device_reg.async_get(device_id)
-        sn = device_entry.serial_number
-        _LOGGER.info(f"Setting pressure test schedule {sn} to {hour}:{minute}")
-        if not sn:
-            _LOGGER.error("No serial number found for device %s", device_id)
-            return
+        coordinator = hass.data[DOMAIN][entry.entry_id]
         try:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
+            await coordinator.cubic_secure_set_pressure_test_schedule(sn, hour, minute)
+        except Exception as err:
+            _LOGGER.error("Error setting pressure test schedule: %s", err)
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                if not await lk_inst.login():
-                    _LOGGER.error("Failed to login, abort update")
-                    raise Exception("Failed to login")
-                await lk_inst.cubic_secure_set_pressure_test_schedule(sn, hour, minute)
-        except Exception as e:
-            _LOGGER.error("Error setting pressure test schedule: %s", e)
-
-    @callback
     async def set_thresholds(call: ServiceCall) -> None:
-        """Handle the service action call."""
-        device_id = call.data.get("device_id")
-        device_reg = dr.async_get(hass)
-        device_entry = device_reg.async_get(device_id)
-        sn = device_entry.serial_number
-        pressure_sensitivity = call.data.get("pressure_sensitivity", 0.3)
-        pressure_test_duration = call.data.get("pressure_test_duration", 45)
-        pressure_close_delay = call.data.get("pressure_close_delay", 255600)
-        pressure_notification_delay = call.data.get(
-            "pressure_notification_delay", 169200
-        )
-        medium_leak_threshold = call.data.get("medium_leak_threshold", 5.0)
-        medium_leak_close_delay = call.data.get("medium_leak_close_delay", 2700)
-        medium_leak_notification_delay = call.data.get(
-            "medium_leak_notification_delay", 2700
-        )
-        large_leak_threshold = call.data.get("large_leak_threshold", 1500.0)
-        large_leak_close_delay = call.data.get("large_leak_close_delay", 90)
-        large_leak_notification_delay = call.data.get(
-            "large_leak_notification_delay", 90
-        )
+        """Set leak detection thresholds."""
+        sn = _get_serial(call)
+        if not sn:
+            return
         thresholds = LKThresholds(
             pressure=LKPressureThresholds(
-                sensitivity=pressure_sensitivity,
-                duration=pressure_test_duration,
-                closeDelay=pressure_close_delay,
-                notificationDelay=pressure_notification_delay,
+                sensitivity=call.data.get("pressure_sensitivity", 0.3),
+                duration=call.data.get("pressure_test_duration", 45),
+                closeDelay=call.data.get("pressure_close_delay", 255600),
+                notificationDelay=call.data.get("pressure_notification_delay", 169200),
             ),
             leakMedium={
-                "threshold": medium_leak_threshold,
-                "closeDelay": medium_leak_close_delay,
-                "notificationDelay": medium_leak_notification_delay,
+                "threshold": call.data.get("medium_leak_threshold", 5.0),
+                "closeDelay": call.data.get("medium_leak_close_delay", 2700),
+                "notificationDelay": call.data.get("medium_leak_notification_delay", 2700),
             },
             leakLarge={
-                "threshold": large_leak_threshold,
-                "closeDelay": large_leak_close_delay,
-                "notificationDelay": large_leak_notification_delay,
+                "threshold": call.data.get("large_leak_threshold", 1500.0),
+                "closeDelay": call.data.get("large_leak_close_delay", 90),
+                "notificationDelay": call.data.get("large_leak_notification_delay", 90),
             },
         )
-        _LOGGER.info(f"Setting thresholds {sn} to {thresholds}")
-        if not sn:
-            _LOGGER.error("No serial number found for device %s", device_id)
-            return
+        coordinator = hass.data[DOMAIN][entry.entry_id]
         try:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
+            await coordinator.cubic_secure_set_thresholds(sn, thresholds)
+        except Exception as err:
+            _LOGGER.error("Error setting thresholds: %s", err)
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                if not await lk_inst.login():
-                    _LOGGER.error("Failed to login, abort update")
-                    raise Exception("Failed to login")
-                await lk_inst.cubic_secure_set_thresholds(sn, thresholds)
-        except Exception as e:
-            _LOGGER.error("Error setting thresholds: %s", e)
-
-    # Register our service with Home Assistant.
     hass.services.async_register(DOMAIN, "pause_leak_detection", pause_leak_detection)
     hass.services.async_register(DOMAIN, "close_valve", close_valve)
     hass.services.async_register(DOMAIN, "open_valve", open_valve)
-    hass.services.async_register(
-        DOMAIN, "set_pressure_test_schedule", set_pressure_test_schedule
-    )
+    hass.services.async_register(DOMAIN, "set_pressure_test_schedule", set_pressure_test_schedule)
     hass.services.async_register(DOMAIN, "set_thresholds", set_thresholds)

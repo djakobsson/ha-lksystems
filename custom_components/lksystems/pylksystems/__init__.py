@@ -89,12 +89,11 @@ class LKSystemsManager:
 
     async def handle_client_error(self, endpoint, headers, error):
         """Handle ClientError and log relevant information."""
-        _LOGGER.error(
-            "An error occurred during the request. URL: %s, Headers: %s. Error: %s",
-            self.base_url + endpoint,
-            headers,
-            error,
-        )
+        url = self.base_url + endpoint
+        if hasattr(error, "status") and error.status == 429:
+            _LOGGER.warning("Rate limited by LK Systems API (%s). Will retry later.", url)
+        else:
+            _LOGGER.error("Request failed: %s — %s", url, error)
         return False
 
     def _get_headers(self):

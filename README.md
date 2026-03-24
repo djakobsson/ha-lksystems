@@ -5,7 +5,7 @@
 Cloud-polling integration for LK Systems smart home devices using the MyLK API.
 
 Supports:
-- [LK CubicSecure](https://www.lksystems.se/sv/produkter/teknisk-armatur/vattenfelsutrustning/vattenfelsbrytare/lk-cubicsecure-77792594) — water protection unit
+- [LK CubicSecure](https://www.lksystems.se/sv/produkter/vattenfelsutrustning/vattenfelsbrytare/lk-cubicsecure-77792594/) — water protection unit
 - [LK CubicDetector](https://www.lksystems.se/sv/produkter/teknisk-armatur/vattenfelsutrustning/) — wireless water/freeze sensor
 - [LK Arc](https://www.lksystems.se/sv/produktsystem/golvvarme/lk-rumsreglering-arc/) — wireless thermostats and sensors
 

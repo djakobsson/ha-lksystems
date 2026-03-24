@@ -120,7 +120,7 @@ LK_CUBICSECURE_SENSORS: dict[str, SensorEntityDescription] = {
     "cacheUpdated": SensorEntityDescription(
         key="cacheUpdated",
         name="Cache Updated",
-        icon="mdi:clock-sync-outline",
+        icon="mdi:cached",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
         translation_key="cache_updated_sensor",

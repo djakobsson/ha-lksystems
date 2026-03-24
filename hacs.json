@@ -1,6 +1,6 @@
 {
-    "name": "LK Systems (Cubic Secure and Arc)",
-    "homeassistant": "2025.1.1",
+    "name": "LK Systems",
+    "homeassistant": "2026.1.0",
     "render_readme": true,
     "country": ["ALL"]
-  }
+}

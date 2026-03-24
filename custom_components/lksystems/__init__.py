@@ -245,26 +245,17 @@ class LKSystemCoordinator(DataUpdateCoordinator[LkStructureResp]):
         _LOGGER.debug("Setting temperature for device %s to %s", device_id, temperature)
 
         try:
-            # Create a new instance of LKSystemsManager for this operation
-            username = self._entry.data.get(CONF_USERNAME)
-            password = self._entry.data.get(CONF_PASSWORD)
+            result = await self._run_with_api(
+                lambda lk: lk.set_thermostat_temperature(device_id, temperature)
+            )
 
-            async with LKSystemsManager(username, password) as lk_inst:
-                # Call the LKSystemsManager method to set the temperature
-                result = await lk_inst.set_thermostat_temperature(
-                    device_id, temperature
-                )
+            if not result["success"]:
+                _LOGGER.error("Failed to set temperature: %s", result["error"])
+                return False
 
-                if not result["success"]:
-                    _LOGGER.error("Failed to set temperature: %s", result["error"])
-                    return False
-
-                _LOGGER.debug("Temperature set successfully: %s", result["data"])
-
-                # Update the coordinator data to reflect the change
-                await self.async_refresh()
-
-                return True
+            _LOGGER.debug("Temperature set successfully: %s", result["data"])
+            await self.async_refresh()
+            return True
 
         except Exception as ex:
             _LOGGER.error("Failed to set temperature: %s", ex)

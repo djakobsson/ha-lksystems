@@ -235,10 +235,16 @@ class LKSystemsManager:
         return self._cubic_secure_messurement
 
     async def get_user_structure(self):
-        """Fetch user secure measurement"""
+        """Fetch user structure (real estate + devices)."""
         endpoint = f"service/users/user/{self.userid}/structure/1"
         success, res = await self._get(endpoint)
         if success:
+            if not res:
+                _LOGGER.error(
+                    "No home found in LK Systems account. "
+                    "Make sure a home is set up in the MyLK app before adding this integration."
+                )
+                return False
             self._user_structure = res[0]
             return True
         return False
